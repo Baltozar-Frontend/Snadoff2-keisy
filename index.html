@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Standoff Pro Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #0b121c; --panel: #141d2b; --accent: #f6b52b;
+            --arcana: #ff4b4b; --legendary: #d32ce6;
+        }
+
+        * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        
+        body {
+            margin: 0; background: var(--bg); color: white;
+            font-family: 'Oswald', sans-serif; display: flex; height: 100vh; overflow: hidden;
+            user-select: none; -webkit-user-select: none;
+        }
+
+        /* Анимация вылетающих цифр */
+        .click-particle {
+            position: absolute; pointer-events: none;
+            font-weight: bold; font-size: 24px;
+            animation: floatUp 0.8s ease-out forwards;
+            z-index: 50; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        @keyframes floatUp { 0% {transform: translateY(0) scale(1); opacity:1;} 100% {transform: translateY(-80px) scale(1.2); opacity:0;} }
+        
+        .crit-text { color: #ff0000 !important; font-size: 32px !important; text-shadow: 0 0 10px #ff0000; }
+
+        /* Навигация */
+        nav { width: 70px; background: var(--panel); border-right: 1px solid #1f2b3d; display: flex; flex-direction: column; align-items: center; padding-top: 20px; gap: 20px; z-index: 10; }
+        .nav-btn { width: 45px; height: 45px; opacity: 0.5; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; background: rgba(255,255,255,0.05); border-radius: 8px; }
+        .nav-btn.active { opacity: 1; background: var(--accent); color: #000; box-shadow: 0 0 10px var(--accent); }
+
+        /* Экраны */
+        .wrapper { flex: 1; display: flex; flex-direction: column; position: relative; }
+        header { height: 60px; background: var(--panel); display: flex; justify-content: flex-end; align-items: center; padding: 0 15px; gap: 10px; border-bottom: 1px solid #1f2b3d; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        
+        .wallet { background: rgba(0,0,0,0.3); border: 1px solid #2a3b55; padding: 5px 15px; border-radius: 6px; display: flex; align-items: center; gap: 8px; min-width: 120px; font-size: 18px; }
+        .screen { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, #1a273a 0%, #0b121c 100%); position: relative; width: 100%; }
+        .screen.active-screen { display: flex; }
+
+        /* ИГРОВАЯ ЗОНА */
+        .case-container { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; height: 350px; }
+        .case-obj { cursor: pointer; transition: transform 0.08s; z-index: 10; position: relative; }
+        .case-obj:active { transform: scale(0.95) rotate(-2deg); }
+        /* Размер кейса настроен под твои фото */
+        .case-obj img { width: 340px; filter: drop-shadow(0 0 40px rgba(0,0,0,0.6)); }
+
+        .p-box { width: 85%; max-width: 400px; margin-top: 20px; }
+        .p-bar { width: 100%; height: 16px; background: #0f1621; border-radius: 8px; overflow: hidden; border: 1px solid #253a52; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
+        .p-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #f6b52b, #ffda7c); box-shadow: 0 0 20px var(--accent); transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        #open-btn {
+            display: none; padding: 18px 50px; background: var(--accent); color: #000;
+            font-weight: 800; font-size: 22px; border: none; border-radius: 12px;
+            cursor: pointer; position: absolute; z-index: 20; box-shadow: 0 10px 30px rgba(246, 181, 43, 0.4);
+            text-transform: uppercase; letter-spacing: 1px; animation: pulseBtn 1.5s infinite;
+        }
+        @keyframes pulseBtn { 0% {transform: scale(1);} 50% {transform: scale(1.05);} 100% {transform: scale(1);} }
+
+        /* Инвентарь */
+        #inventory-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+            gap: 12px; padding: 20px; width: 100%; max-width: 600px; height: 100%; overflow-y: auto; align-content: start;
+        }
+        .inv-item { 
+            background: #131c29; border-radius: 8px; overflow: hidden; position: relative; aspect-ratio: 1;
+            display: flex; align-items: center; justify-content: center; border-bottom: 3px solid transparent;
+        }
+        .inv-item img { width: 90%; height: 90%; object-fit: contain; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.5)); }
+        
+        .rarity-arcana { border-bottom-color: var(--arcana) !important; background: linear-gradient(to top, rgba(255, 75, 75, 0.1), transparent); }
+        .rarity-legendary { border-bottom-color: var(--legendary) !important; background: linear-gradient(to top, rgba(211, 44, 230, 0.1), transparent); }
+
+        /* Рулетка */
+        #roulette-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 100; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .roulette-window {
+            width: 100%; height: 160px; background: #0b121c; border-top: 2px solid #2a3b55; border-bottom: 2px solid #2a3b55;
+            position: relative; overflow: hidden; display: flex; align-items: center;
+        }
+        .roulette-strip { display: flex; position: absolute; left: 0; height: 100%; will-change: transform; }
+        .r-item {
+            width: 130px; height: 100%; border-right: 1px solid #1a273a;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            position: relative;
+        }
+        .r-item img { width: 100px; height: 100px; object-fit: contain; }
+        .r-line { position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; }
+        
+        .marker {
+            position: absolute; left: 50%; top: 0; height: 100%; width: 2px;
+            background: #fff; transform: translateX(-50%); z-index: 20;
+            box-shadow: 0 0 15px rgba(255,255,255,0.8);
+        }
+
+        /* Выпадение */
+        #final-drop {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 18, 28, 0.98); z-index: 110; flex-direction: column; align-items: center; justify-content: center;
+        }
+        #final-img { width: 70%; max-width: 400px; animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .drop-title { margin-top: 20px; font-size: 28px; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+        .btn-claim { margin-top: 30px; padding: 15px 40px; background: var(--blue-bright); border: 2px solid var(--accent); color: white; font-size: 18px; font-weight: bold; cursor: pointer; }
+        
+        @keyframes popIn { 0% {transform: scale(0.5); opacity:0;} 70% {transform: scale(1.1);} 100% {transform: scale(1);} }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="nav-btn active" onclick="switchScreen('game', this)">🏠</div>
+        <div class="nav-btn" onclick="switchScreen('inventory', this)">🎒</div>
+    </nav>
+
+    <div class="wrapper">
+        <header>
+            <div class="wallet"><span style="color:#aeb9cc" id="coins">0</span> <span style="font-size:14px; opacity:0.5">C</span></div>
+            <div class="wallet"><span style="color:var(--accent)" id="gold">0.00</span> <span style="font-size:14px; opacity:0.5">G</span></div>
+        </header>
+
+        <div id="game-screen" class="screen active-screen">
+            <button id="open-btn" onclick="startRoulette()">ОТКРЫТЬ КЕЙС</button>
+
+            <div class="case-container">
+                <div class="case-obj" id="case-clicker" onclick="handleClick(event)">
+                    <img src="IMG_6403.jpeg" alt="CASE">
+                </div>
+            </div>
+
+            <div class="p-box">
+                <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom: 8px; font-size: 18px;">
+                    <span id="p-text">0 / 100</span>
+                    <span style="color:var(--accent)">КЕЙС</span>
+                </div>
+                <div class="p-bar"><div class="p-fill" id="p-fill"></div></div>
+            </div>
+            
+            <div style="margin-top:20px; color: #52637a; font-size: 14px;">Кликай, чтобы открыть!</div>
+        </div>
+
+        <div id="inventory-screen" class="screen">
+            <div style="width:100%; padding: 15px; border-bottom: 1px solid #1f2b3d; text-align:center; font-size: 20px; font-weight:bold;">ВАШИ СКИНЫ</div>
+            <div id="inventory-grid">
+                <div style="grid-column: 1/-1; text-align:center; color:#52637a; margin-top: 50px;">Инвентарь пуст</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="roulette-modal">
+        <div class="roulette-window">
+            <div class="roulette-strip" id="strip"></div>
+            <div class="marker"></div>
+        </div>
+        <div style="margin-top: 25px; font-size: 24px; font-weight: bold; letter-spacing: 2px;">ROLLING...</div>
+    </div>
+
+    <div id="final-drop">
+        <div style="color:white; opacity: 0.5; margin-bottom: 20px;">ВЫ ВЫБИЛИ:</div>
+        <img src="" id="final-img">
+        <div class="drop-title" id="win-name">ITEM NAME</div>
+        <button class="btn-claim" onclick="closeDrop()">ЗАБРАТЬ</button>
+    </div>
+
+<script>
+    // --- КОНФИГ ---
+    let coins = parseFloat(localStorage.getItem('coins')) || 0;
+    let gold = parseFloat(localStorage.getItem('gold')) || 0;
+    let clicks = 0;
+    const goal = 100; // Цель: 100 кликов
+    let inventory = JSON.parse(localStorage.getItem('inv')) || [];
+
+    // --- БАЗА ПРЕДМЕТОВ (ТВОИ КАРТИНКИ) ---
+    const itemsDB = [
+        // Калаш (Legendary - Розовый)
+        { id: 'akr', name: 'AKR NECROMANCER', img: 'IMG_6400.jpeg', rarity: 'legendary' },
+        // Бабочка (Arcana - Красный)
+        { id: 'bab', name: 'BUTTERFLY LEGACY', img: 'IMG_6407.jpeg', rarity: 'arcana' }
+    ];
+
+    // --- ЛОГИКА ---
+    function handleClick(e) {
+        if (clicks >= goal) return;
+
+        // Крит? (5% шанс)
+        let isCrit = Math.random() < 0.05;
+        let addCoins = isCrit ? 10 : 2; // +2 Серебра
+        let addGold = isCrit ? 5 : 1;   // +1 Голда
+
+        coins += addCoins;
+        gold += addGold;
+        clicks++;
+        
+        spawnParticles(e, addCoins, addGold, isCrit);
+        updateUI();
+
+        if (clicks >= goal) {
+            document.getElementById('open-btn').style.display = 'block';
+            document.getElementById('case-clicker').style.opacity = '0.3';
+            document.getElementById('case-clicker').style.pointerEvents = 'none';
+        }
+    }
+
+    // --- АНИМАЦИЯ ЦИФР ---
+    function spawnParticles(e, cVal, gVal, crit) {
+        let p1 = document.createElement('div');
+        p1.className = 'click-particle';
+        if(crit) p1.classList.add('crit-text');
+        p1.innerText = `+${cVal}C`;
+        p1.style.color = '#aeb9cc';
+        
+        let p2 = document.createElement('div');
+        p2.className = 'click-particle';
+        if(crit) p2.classList.add('crit-text');
+        p2.innerText = `+${gVal}G`;
+        p2.style.color = '#f6b52b';
+
+        let rect = e.target.getBoundingClientRect();
+        let x = e.clientX || (rect.left + rect.width/2);
+        let y = e.clientY || (rect.top + rect.height/2);
+
+        p1.style.left = (x - 20) + 'px';
+        p1.style.top = (y - 50) + 'px';
+        p2.style.left = (x + 20) + 'px';
+        p2.style.top = (y - 80) + 'px';
+
+        document.body.appendChild(p1);
+        document.body.appendChild(p2);
+
+        setTimeout(() => { p1.remove(); p2.remove(); }, 800);
+    }
+
+    // --- РУЛЕТКА ---
+    function startRoulette() {
+        document.getElementById('roulette-modal').style.display = 'flex';
+        const strip = document.getElementById('strip');
+        strip.innerHTML = '';
+        strip.style.transition = 'none';
+        strip.style.transform = 'translateX(0px)';
+
+        let rouletteItems = [];
+        const totalItems = 60;
+        const winIndex = 50; 
+
+        // Генерируем ленту
+        for (let i = 0; i < totalItems; i++) {
+            let item = itemsDB[Math.floor(Math.random() * itemsDB.length)];
+            rouletteItems.push(item);
+            let color = item.rarity === 'arcana' ? '#ff4b4b' : '#d32ce6';
+            
+            const div = document.createElement('div');
+            div.className = 'r-item';
+            div.innerHTML = `
+                <img src="${item.img}">
+                <div class="r-line" style="background:${color}"></div>
+            `;
+            strip.appendChild(div);
+        }
+
+        const winner = rouletteItems[winIndex];
+
+        setTimeout(() => {
+            const itemWidth = 130; 
+            const centerOffset = window.innerWidth / 2 - itemWidth / 2;
+            const randomOffset = Math.floor(Math.random() * 80) - 40; 
+            const targetPosition = (winIndex * itemWidth) - centerOffset + randomOffset;
+            
+            strip.style.transition = 'transform 6s cubic-bezier(0.1, 1, 0.1, 1)';
+            strip.style.transform = `translateX(-${targetPosition}px)`;
+
+            setTimeout(() => {
+                showDrop(winner);
+            }, 6000);
+        }, 100);
+    }
+
+    function showDrop(item) {
+        document.getElementById('roulette-modal').style.display = 'none';
+        document.getElementById('final-drop').style.display = 'flex';
+        
+        const img = document.getElementById('final-img');
+        img.src = item.img;
+        
+        let color = item.rarity === 'arcana' ? '#ff4b4b' : '#d32ce6';
+        img.style.filter = `drop-shadow(0 0 30px ${color})`;
+        
+        const title = document.getElementById('win-name');
+        title.innerText = item.name;
+        title.style.color = color;
+
+        inventory.push(item);
+        localStorage.setItem('inv', JSON.stringify(inventory));
+        renderInventory();
+    }
+
+    function closeDrop() {
+        document.getElementById('final-drop').style.display = 'none';
+        clicks = 0;
+        updateUI();
+        document.getElementById('open-btn').style.display = 'none';
+        document.getElementById('case-clicker').style.opacity = '1';
+        document.getElementById('case-clicker').style.pointerEvents = 'auto';
+        switchScreen('inventory', document.querySelectorAll('.nav-btn')[1]);
+    }
+
+    function updateUI() {
+        localStorage.setItem('coins', coins);
+        localStorage.setItem('gold', gold);
+        document.getElementById('coins').innerText = Math.floor(coins);
+        document.getElementById('gold').innerText = gold.toFixed(2);
+        
+        document.getElementById('p-text').innerText = `${clicks} / ${goal}`;
+        document.getElementById('p-fill').style.width = (clicks / goal * 100) + '%';
+    }
+
+    function switchScreen(id, btn) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+        document.getElementById(id + '-screen').classList.add('active-screen');
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+
+    function renderInventory() {
+        const grid = document.getElementById('inventory-grid');
+        if (inventory.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#52637a;margin-top:40px">ПУСТО...</div>';
+            return;
+        }
+        grid.innerHTML = '';
+        inventory.slice().reverse().forEach(item => {
+            const div = document.createElement('div');
+            div.className = `inv-item rarity-${item.rarity}`;
+            div.innerHTML = `<img src="${item.img}">`;
+            grid.appendChild(div);
+        });
+    }
+
+    updateUI();
+    renderInventory();
+</script>
+</body>
+</html>
